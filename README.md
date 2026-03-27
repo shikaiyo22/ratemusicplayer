@@ -12,7 +12,7 @@ Supports MP3, FLAC and WAV (tested). AAC/M4A and OGG should work but are unteste
 
 ### Ratings
 
-Rate every track from 1-100, just like AOTY but without the album rating threshold. Every track in your library is rateable regardless of how many ratings it has.
+Rate every track from 1-100, just like AOTY but without the album rating threshold. 
 
 ### Shuffle Modes
 
