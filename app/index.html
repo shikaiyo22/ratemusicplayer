@@ -121,6 +121,7 @@
   .group-collapse-btn.collapsed { transform: rotate(-90deg); }
   .album-group-artist { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .album-group-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-left: auto; flex-shrink: 0; }
+  .album-group-avg { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; flex-shrink: 0; margin-left: 10px; }
   .group-repeat-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 3px 5px; border-radius: 3px; display: flex; align-items: center; flex-shrink: 0; transition: color .15s; margin-left: 6px; opacity: 0; }
   .album-group-header:hover .group-repeat-btn { opacity: 1; }
   .group-repeat-btn.active { color: var(--accent); opacity: 1; }
@@ -1144,7 +1145,21 @@ function renderTrackList() {
       repeatBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>`;
       repeatBtn.onclick = e => { e.stopPropagation(); toggleRepeatGroup(key); };
 
-      header.append(chkEl, collapseBtn, textWrap, countEl, repeatBtn);
+      const avgBadge = document.createElement('span');
+      avgBadge.className = 'album-group-avg';
+      if (groupByAlbum) {
+        const groupRatings = group.tracks.map(({t}) => ratings[t.id]).filter(v => v != null);
+        if (groupRatings.length) {
+          const avg = Math.round(groupRatings.reduce((a,b) => a+b, 0) / groupRatings.length);
+          avgBadge.textContent = avg;
+          avgBadge.classList.add(scoreClass(avg));
+        } else {
+          avgBadge.textContent = '—';
+          avgBadge.style.color = 'var(--muted)';
+          avgBadge.style.opacity = '0.4';
+        }
+      }
+      header.append(chkEl, collapseBtn, textWrap, countEl, groupByAlbum ? avgBadge : document.createTextNode(''), repeatBtn);
       list.appendChild(header);
 
       if (isCollapsed) return; // skip rendering tracks for this group
