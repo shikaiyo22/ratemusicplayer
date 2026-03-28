@@ -1674,7 +1674,7 @@ function renderTrackList() {
       });
     });
   } else {
-    const idxs = tracks.map((_,i)=>i).filter(i => trackMatchesSearch(tracks[i]));
+    const idxs = [...tracks.map((_,i)=>i).filter(i => trackMatchesSearch(tracks[i]))].reverse();
     const order =
       sortMode === 1 ? [...idxs].sort((a,b)=>(ratings[tracks[b].id]??-1)-(ratings[tracks[a].id]??-1)) :
       sortMode === 2 ? (() => {
