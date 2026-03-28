@@ -1663,7 +1663,7 @@ function renderTrackList() {
 
       let groupTracks = group.tracks;
       if (sortMode === 1) groupTracks = [...groupTracks].sort((a,b) => (ratings[b.t.id]??-1)-(ratings[a.t.id]??-1));
-      else if (sortMode === 2) groupTracks = [...groupTracks].sort((a,b) => { const wa=Math.floor(a.t.id/5000), wb=Math.floor(b.t.id/5000); return wb!==wa ? wb-wa : a.origIdx-b.origIdx; });
+      else if (sortMode === 2) groupTracks = [...groupTracks].sort((a,b) => a.origIdx - b.origIdx);
       else if (sortMode === 3) groupTracks = [...groupTracks].sort((a,b) => a.t.title.localeCompare(b.t.title, undefined, {sensitivity:'base'}));
       else if (sortMode === 4) groupTracks = [...groupTracks].sort((a,b) => a.t.artist.localeCompare(b.t.artist, undefined, {sensitivity:'base'}));
       else if (sortMode === 5) groupTracks = [...groupTracks].sort((a,b) => a.t.album.localeCompare(b.t.album, undefined, {sensitivity:'base'}));
