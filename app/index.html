@@ -498,7 +498,7 @@ const dbGet      = (s,k)  => new Promise((res,rej) => { const r = db.transaction
 // ═══════════════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════════════
-let tracks      = [], ratings = {}, currentIdx = null, sortMode = 0, groupByAlbum = false, groupByArtist = false, groupByGenre = false;
+let tracks      = [], ratings = {}, currentIdx = null, sortMode = 0, groupByAlbum = false, groupByArtist = false, groupByGenre = false, groupByAlbumArtist = false;
 let searchQuery = '';
 let collapsedGroups = new Set();
 let repeatGroup = null; // key of the group currently set to repeat (null = off)
@@ -541,7 +541,7 @@ async function loadLibrary() {
   for (const saved of savedTracks) {
     const objectUrl = URL.createObjectURL(saved.audioBlob);
     const coverUrl  = saved.coverBlob ? URL.createObjectURL(saved.coverBlob) : null;
-    tracks.push({ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album, genre: saved.genre||'', dur: saved.dur, coverColors: saved.coverColors, objectUrl, coverUrl });
+    tracks.push({ id: saved.id, title: saved.title, artist: saved.artist, albumArtist: saved.albumArtist||'', album: saved.album, genre: saved.genre||'', dur: saved.dur, coverColors: saved.coverColors, objectUrl, coverUrl });
   }
   document.getElementById('loading-screen').style.display = 'none';
   updateStorageBadge();
@@ -599,6 +599,7 @@ function importTrack(file) {
             const t = tag.tags;
             if (t.title)  track.title  = t.title;
             if (t.artist) track.artist = t.artist;
+            if (t.TPE2) track.albumArtist = t.TPE2.data || t.TPE2;
             if (t.album)  track.album  = t.album;
             let coverBlob = null;
             if (t.picture) {
@@ -607,12 +608,12 @@ function importTrack(file) {
               track.coverColors = await extractColors(track.coverUrl);
             }
             const nextOrder = tracks.length > 0 ? Math.max(...tracks.map((_,i)=>i)) + 1 : 0;
-            await dbPut('tracks', { id: track.id, order: nextOrder, title: track.title, artist: track.artist, album: track.album, genre: track.genre, dur: track.dur, coverColors: track.coverColors, audioBlob, coverBlob });
+            await dbPut('tracks', { id: track.id, order: nextOrder, title: track.title, artist: track.artist, albumArtist: track.albumArtist||'', album: track.album, genre: track.genre, dur: track.dur, coverColors: track.coverColors, audioBlob, coverBlob });
             tagRes();
           },
           async onError() {
             const nextOrder = tracks.length > 0 ? Math.max(...tracks.map((_,i)=>i)) + 1 : 0;
-            await dbPut('tracks', { id: track.id, order: nextOrder, title: track.title, artist: track.artist, album: track.album, genre: track.genre, dur: track.dur, coverColors: track.coverColors, audioBlob, coverBlob: null });
+            await dbPut('tracks', { id: track.id, order: nextOrder, title: track.title, artist: track.artist, albumArtist: track.albumArtist||'', album: track.album, genre: track.genre, dur: track.dur, coverColors: track.coverColors, audioBlob, coverBlob: null });
             tagRes();
           }
         });
@@ -1037,14 +1038,16 @@ function renderTrackList() {
 
   list.innerHTML = '';
 
-  if (groupByAlbum || groupByArtist || groupByGenre) {
+  if (groupByAlbum || groupByArtist || groupByGenre || groupByAlbumArtist) {
     const groups = {};
     tracks.forEach((t, i) => {
       const key = groupByArtist
         ? (t.artist || 'Unknown Artist').trim()
         : groupByGenre
           ? (t.genre  || 'Unknown Genre').trim()
-          : (t.album  || 'Unknown Album').trim();
+          : groupByAlbumArtist
+            ? (t.albumArtist || 'Unknown Artist').trim()
+            : (t.album  || 'Unknown Album').trim();
       if (!groups[key]) groups[key] = { label: key, artist: t.artist, album: t.album, genre: t.genre, tracks: [] };
       if (trackMatchesSearch(t)) groups[key].tracks.push({ t, origIdx: i });
     });
@@ -1059,7 +1062,7 @@ function renderTrackList() {
       // Group header
       const header = document.createElement('div');
       header.className = 'album-group-header';
-      header.title = `Click to select all tracks in this ${groupByArtist ? 'artist' : groupByGenre ? 'genre' : 'album'}`;
+      header.title = `Click to select all tracks in this ${groupByArtist ? 'artist' : groupByGenre ? 'genre' : groupByAlbumArtist ? 'album artist' : 'album'}`;
       header.style.cursor = 'pointer';
 
       const textWrap = document.createElement('div');
@@ -1074,6 +1077,9 @@ function renderTrackList() {
       } else if (groupByGenre) {
         albumEl.title = 'Click to rename genre for all tracks';
         albumEl.onclick = e => { e.stopPropagation(); startGroupFieldEdit(albumEl, 'genre', groupIds, group.label); };
+      } else if (groupByAlbumArtist) {
+        albumEl.title = 'Click to rename album artist for all tracks';
+        albumEl.onclick = e => { e.stopPropagation(); startGroupFieldEdit(albumEl, 'albumArtist', groupIds, group.label); };
       } else {
         albumEl.title = 'Click to rename album for all tracks';
         albumEl.onclick = e => { e.stopPropagation(); startGroupFieldEdit(albumEl, 'album', groupIds, group.label); };
@@ -1087,10 +1093,14 @@ function renderTrackList() {
       } else if (groupByGenre) {
         const artists = new Set(group.tracks.map(({t}) => t.artist)).size;
         artistEl.textContent = `${artists} artist${artists>1?'s':''}`;
+      } else if (groupByAlbumArtist) {
+        const albums = new Set(group.tracks.map(({t}) => t.album)).size;
+        artistEl.textContent = `${albums} album${albums>1?'s':''}`;
       } else {
-        artistEl.textContent = group.artist;
-        artistEl.title = 'Click to set artist for all tracks';
-        artistEl.onclick = e => { e.stopPropagation(); startGroupFieldEdit(artistEl, 'artist', groupIds, group.artist); };
+        const aaText = group.tracks[0]?.t.albumArtist || '';
+        artistEl.textContent = aaText || group.artist;
+        artistEl.title = 'Click to set album artist for all tracks';
+        artistEl.onclick = e => { e.stopPropagation(); startGroupFieldEdit(artistEl, 'albumArtist', groupIds, aaText); };
       }
 
       const groupGenre = group.tracks[0]?.t?.genre || '';
@@ -1105,7 +1115,7 @@ function renderTrackList() {
 
       textWrap.appendChild(albumEl);
       textWrap.appendChild(artistEl);
-      if (!groupByArtist && !groupByGenre) textWrap.appendChild(genreEl2);
+      if (!groupByArtist && !groupByGenre && !groupByAlbumArtist) textWrap.appendChild(genreEl2);
 
       const countEl = document.createElement('span');
       countEl.className = 'album-group-count';
@@ -1355,15 +1365,17 @@ function setSort(val) {
 // group mode: 0 = none, 1 = album, 2 = artist
 let groupMode = 0;
 function cycleGroup() {
-  groupMode = (groupMode + 1) % 4;
-  groupByAlbum  = groupMode === 1;
-  groupByArtist = groupMode === 2;
-  groupByGenre  = groupMode === 3;
+  groupMode = (groupMode + 1) % 5;
+  groupByAlbum       = groupMode === 1;
+  groupByArtist      = groupMode === 2;
+  groupByGenre       = groupMode === 3;
+  groupByAlbumArtist = groupMode === 4;
   const btn = document.getElementById('group-btn');
   if (groupMode === 0) { btn.textContent = 'Group'; btn.classList.remove('active'); }
   else if (groupMode === 1) { btn.textContent = 'Group: Album ✓'; btn.classList.add('active'); }
   else if (groupMode === 2) { btn.textContent = 'Group: Artist ✓'; btn.classList.add('active'); }
-  else { btn.textContent = 'Group: Genre ✓'; btn.classList.add('active'); }
+  else if (groupMode === 3) { btn.textContent = 'Group: Genre ✓'; btn.classList.add('active'); }
+  else { btn.textContent = 'Group: Album Artist ✓'; btn.classList.add('active'); }
   renderTrackList();
 }
 
