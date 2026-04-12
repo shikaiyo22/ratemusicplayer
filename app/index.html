@@ -128,7 +128,7 @@
 
   /* Tracklist rows — 6 cols: checkbox | num | thumb | meta | score | actions */
   .tracklist { flex: 1; overflow-y: auto; padding: 8px 0; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-  .track-row { display: grid; grid-template-columns: 0px 36px 40px 1fr auto auto; align-items: center; gap: 12px; padding: 9px 20px 9px 28px; cursor: pointer; transition: background 0.12s; border-left: 3px solid transparent; user-select: none; }
+  .track-row { display: grid; grid-template-columns: 0px 36px 40px 1fr auto auto; align-items: center; gap: 12px; padding: 9px 20px 9px 28px; cursor: pointer; transition: background 0.12s; border-left: 3px solid transparent; user-select: none; height: 58px; box-sizing: border-box; }
   .track-row:hover { background: var(--surface); }
   .track-row.active { background: var(--surface2); border-left-color: var(--accent); }
   .track-row.selected { background: rgba(232,201,125,.07); border-left-color: rgba(232,201,125,.4); }
@@ -2823,6 +2823,96 @@ async function fixTrackOrder() {
     req.onerror = () => { if (--pending === 0) { showToast('Track order fixed!'); renderAll(); } };
   });
 } 
+
+// ═══════════════════════════════════════════════════════════════
+//  VIRTUAL SCROLL (flat list only)
+// ═══════════════════════════════════════════════════════════════
+const VS_ROW_H  = 58;   // must match .track-row height in CSS
+const VS_BUFFER = 10;   // extra rows above/below viewport
+
+let vsOrder      = [];  // current sorted index array
+let vsPlaying    = false;
+let vsContainer  = null;
+let vsScroller   = null; // the scrollable parent (.tracklist)
+let vsTop        = null; // spacer div above
+let vsBottom     = null; // spacer div below
+let vsRendered   = { start: -1, end: -1 };
+let vsRAF        = null;
+
+function initVirtualScroll(list, order, playing) {
+  vsOrder   = order;
+  vsPlaying = playing;
+  vsContainer = list;
+
+  // Find scrollable parent
+  vsScroller = list.closest('.tracklist') || list.parentElement;
+
+  // Build scaffold: top spacer, rendered rows, bottom spacer
+  list.innerHTML = '';
+
+  vsTop = document.createElement('div');
+  vsBottom = document.createElement('div');
+  list.appendChild(vsTop);
+  list.appendChild(vsBottom);
+
+  vsRendered = { start: -1, end: -1 };
+
+  // Attach scroll listener (deduplicated)
+  if (!vsScroller._vsAttached) {
+    vsScroller._vsAttached = true;
+    vsScroller.addEventListener('scroll', () => {
+      if (vsRAF) cancelAnimationFrame(vsRAF);
+      vsRAF = requestAnimationFrame(vsRender);
+    }, { passive: true });
+  }
+
+  vsRender();
+}
+
+function vsRender() {
+  if (!vsContainer || !vsScroller || !vsOrder.length) return;
+
+  const scrollTop  = vsScroller.scrollTop;
+  const viewH      = vsScroller.clientHeight;
+  const total      = vsOrder.length;
+  const totalH     = total * VS_ROW_H;
+
+  const firstVis   = Math.floor(scrollTop / VS_ROW_H);
+  const lastVis    = Math.min(total - 1, Math.floor((scrollTop + viewH) / VS_ROW_H));
+
+  const start      = Math.max(0, firstVis - VS_BUFFER);
+  const end        = Math.min(total - 1, lastVis + VS_BUFFER);
+
+  // Skip if same window
+  if (start === vsRendered.start && end === vsRendered.end) return;
+
+  // Remove old rows
+  const existing = vsContainer.querySelectorAll('.track-row');
+  existing.forEach(r => r.remove());
+
+  // Update spacers
+  vsTop.style.height    = (start * VS_ROW_H) + 'px';
+  vsBottom.style.height = ((total - 1 - end) * VS_ROW_H) + 'px';
+
+  // Render visible window
+  const frag = document.createDocumentFragment();
+  for (let i = start; i <= end; i++) {
+    const origIdx = vsOrder[i];
+    frag.appendChild(buildRow(tracks[origIdx], origIdx, vsPlaying, i + 1));
+  }
+  vsBottom.before(frag);
+
+  vsRendered = { start, end };
+}
+
+// Called when playing state changes, rating changes, etc — refreshes visible rows
+function vsRefresh() {
+  if (!vsOrder.length || !vsContainer) return;
+  vsPlaying = !audio.paused;
+  vsRendered = { start: -1, end: -1 }; // force re-render
+  vsRender();
+}
+
 loadLibrary();
 </script>
 
